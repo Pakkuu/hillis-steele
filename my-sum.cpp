@@ -16,7 +16,6 @@ time:  o(n log n / m + m log n)
 #include <cerrno>
 #include <cstring>
 #include <climits>
-
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>

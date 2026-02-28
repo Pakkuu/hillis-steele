@@ -1,11 +1,11 @@
 /*
- * my-sum.cpp
- * Implements the Hillis & Steele parallel prefix-sum algorithm using
- * UNIX fork(), shmget() shared memory, and a reusable barrier.
- *
- * Space: O(n)  – two ping-pong arrays of size n plus O(m) barrier state.
- * Time:  O(n log n / m + m log n)
- */
+my-sum.cpp
+implements the hillis & steele parallel prefix-sum algorithm using
+unix fork(), shmget() shared memory, and a reusable barrier.
+
+space: o(n)  – two ping-pong arrays of size n plus o(m) barrier state.
+time:  o(n log n / m + m log n)
+*/
 
 #include <iostream>
 #include <fstream>
@@ -24,20 +24,20 @@
 #include <unistd.h>
 #include <signal.h>
 
-/* ── Barrier ─────────────────────────────────────────────────────────────── */
+/* ── barrier ─────────────────────────────────────────────────────────────── */
 
 /*
- * Reusable spinlock barrier backed by atomic counters in shmget() shared
- * memory.  Works across fork()ed processes on Linux and macOS.
- *
- * Fields:
- *   count    – total number of processes
- *   arrived  – processes that have called arriveAndWait() this generation
- *   released – processes that have been woken this generation
- *   gen      – generation counter; prevents spurious wake-ups after reset
- *   buf_idx  – index of the "current" ping-pong buffer (0 or 1); flipped
- *              atomically by the last arriving process each round
- */
+reusable spinlock barrier backed by atomic counters in shmget() shared
+memory.  works across fork()ed processes on linux and macos.
+
+fields:
+  count    – total number of processes
+  arrived  – processes that have called arriveandwait() this generation
+  released – processes that have been woken this generation
+  gen      – generation counter; prevents spurious wake-ups after reset
+  buf_idx  – index of the "current" ping-pong buffer (0 or 1); flipped
+             atomically by the last arriving process each round
+*/
 struct Barrier {
     int count;
     volatile int arrived;
@@ -55,31 +55,31 @@ static void barrier_init(Barrier* b, int count) {
     b->buf_idx  = 0;
 }
 
-/* barrier_destroy – no-op (no OS resources to release). */
+/* barrier_destroy – no-op (no os resources to release). */
 static void barrier_destroy(Barrier*) {}
 
 /*
- * arriveAndWait – spin until all `count` processes arrive.
- * The last to arrive flips buf_idx and advances the generation to unblock
- * everyone.  Reusable across rounds.
- */
+arriveandwait – spin until all `count` processes arrive.
+the last to arrive flips buf_idx and advances the generation to unblock
+everyone.  reusable across rounds.
+*/
 static void arriveAndWait(Barrier* b) {
     int my_gen = __atomic_load_n(&b->gen, __ATOMIC_ACQUIRE);
 
     int prev = __atomic_fetch_add(&b->arrived, 1, __ATOMIC_ACQ_REL);
     if (prev + 1 == b->count) {
-        /* Last to arrive: flip buffer, reset arrived, advance generation. */
+        /* last to arrive: flip buffer, reset arrived, advance generation. */
         __atomic_fetch_xor(&b->buf_idx, 1, __ATOMIC_ACQ_REL);
         __atomic_store_n(&b->arrived,   0, __ATOMIC_RELEASE);
         __atomic_fetch_add(&b->gen,     1, __ATOMIC_ACQ_REL);
     } else {
-        /* Spin until the generation advances. */
+        /* spin until the generation advances. */
         while (__atomic_load_n(&b->gen, __ATOMIC_ACQUIRE) == my_gen)
             ; /* busy-wait */
     }
 }
 
-/* ── Shared-memory helpers ───────────────────────────────────────────────── */
+/* ── shared-memory helpers ───────────────────────────────────────────────── */
 
 /* shm_alloc – allocate a private shared-memory segment of `bytes` bytes. */
 static int shm_alloc(size_t bytes) {
@@ -107,13 +107,13 @@ static void shm_free(int id, void* p) {
     shmctl(id, IPC_RMID, nullptr);
 }
 
-/* ── I/O helpers ─────────────────────────────────────────────────────────── */
+/* ── i/o helpers ─────────────────────────────────────────────────────────── */
 
 /*
- * read_and_validate_input – reads tokens from `in`, converts each to a long,
- * and appends to `out`.  Returns false with an error message if any token is
- * not a valid integer or if fewer than `expected_count` are present.
- */
+read_and_validate_input – reads tokens from `in`, converts each to a long,
+and appends to `out`.  returns false with an error message if any token is
+not a valid integer or if fewer than `expected_count` are present.
+*/
 static bool read_and_validate_input(std::istream& in, int expected_count,
                                     std::vector<long>& out) {
     out.clear();
@@ -137,9 +137,9 @@ static bool read_and_validate_input(std::istream& in, int expected_count,
 }
 
 /*
- * write_output – writes `n` elements of `arr` space-separated to `out`,
- * followed by a newline.
- */
+write_output – writes `n` elements of `arr` space-separated to `out`,
+followed by a newline.
+*/
 static void write_output(std::ostream& out, const long* arr, int n) {
     for (int i = 0; i < n; i++) {
         if (i > 0) out << ' ';
@@ -148,22 +148,24 @@ static void write_output(std::ostream& out, const long* arr, int n) {
     out << '\n';
 }
 
-/* ── Worker ──────────────────────────────────────────────────────────────── */
+/* ── worker ──────────────────────────────────────────────────────────────── */
+
+/**/
 
 /*
- * worker – executed by each child process.
- *
- * Parameters:
- *   id      – worker index in [0, m)
- *   n       – total number of elements
- *   m       – total number of workers
- *   rounds  – ceil(log2(n)), number of algorithm iterations
- *   bufs    – two shared ping-pong arrays; bufs[0] and bufs[1] each have n longs
- *   barrier – shared reusable barrier; barrier->buf_idx indicates current read buffer
- */
+worker – executed by each child process.
+
+parameters:
+  id      – worker index in [0, m)
+  n       – total number of elements
+  m       – total number of workers
+  rounds  – ceil(log2(n)), number of algorithm iterations
+  bufs    – two shared ping-pong arrays; bufs[0] and bufs[1] each have n longs
+  barrier – shared reusable barrier; barrier->buf_idx indicates current read buffer
+*/
 static void worker(int id, int n, int m, int rounds,
                    long* bufs[2], Barrier* barrier) {
-    /* Divide [0, n) into m contiguous chunks; last chunk may be one smaller. */
+    /* divide [0, n) into m contiguous chunks; last chunk may be one smaller. */
     int chunk = (n + m - 1) / m;
     int lo    = id * chunk;
     int hi    = std::min(lo + chunk, n);   /* exclusive */
@@ -181,19 +183,19 @@ static void worker(int id, int n, int m, int rounds,
         }
 
         /*
-         * Wait for all workers to finish writing bufs[w].
-         * The last to arrive flips barrier->buf_idx so the next round
+         * wait for all workers to finish writing bufs[w].
+         * the last to arrive flips barrier->buf_idx so the next round
          * reads from bufs[w].
          */
         arriveAndWait(barrier);
     }
 }
 
-/* ── Main ────────────────────────────────────────────────────────────────── */
+/* ── main ────────────────────────────────────────────────────────────────── */
 
 int main(int argc, char* argv[]) {
 
-    /* ---- Argument validation ---- */
+    /* ---- argument validation ---- */
     if (argc != 5) {
         std::cerr << "Usage: " << argv[0]
                   << " <n> <m> <input_file> <output_file>\n";
@@ -237,9 +239,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    /* ---- Allocate shared memory ---- */
+    /* ---- allocate shared memory ---- */
 
-    /* Two ping-pong arrays of n longs. */
+    /* two ping-pong arrays of n longs. */
     int   buf_id[2];
     long* bufs[2];
     for (int i = 0; i < 2; i++) {
@@ -247,18 +249,18 @@ int main(int argc, char* argv[]) {
         bufs[i]   = static_cast<long*>(shm_attach(buf_id[i]));
     }
 
-    /* Barrier. */
+    /* barrier. */
     int      bar_id  = shm_alloc(sizeof(Barrier));
     Barrier* barrier = static_cast<Barrier*>(shm_attach(bar_id));
 
-    /* Copy input into bufs[0] (the initial "current" buffer). */
+    /* copy input into bufs[0] (the initial "current" buffer). */
     for (int i = 0; i < n; i++)
         bufs[0][i] = input[i];
 
     int rounds = (n == 1) ? 0 : static_cast<int>(std::ceil(std::log2(n)));
     barrier_init(barrier, m);
 
-    /* ---- Fork m worker processes ---- */
+    /* ---- fork m worker processes ---- */
     std::vector<pid_t> pids(m);
     for (int id = 0; id < m; id++) {
         pid_t pid = fork();
@@ -268,7 +270,7 @@ int main(int argc, char* argv[]) {
             goto cleanup;
         }
         if (pid == 0) {
-            /* Child: run then exit; detach shared memory on exit. */
+            /* child: run then exit; detach shared memory on exit. */
             worker(id, n, m, rounds, bufs, barrier);
             for (int i = 0; i < 2; i++) shmdt(bufs[i]);
             shmdt(barrier);
@@ -277,7 +279,7 @@ int main(int argc, char* argv[]) {
         pids[id] = pid;
     }
 
-    /* ---- Wait for all workers ---- */
+    /* ---- wait for all workers ---- */
     for (int id = 0; id < m; id++) {
         int status;
         waitpid(pids[id], &status, 0);
@@ -285,8 +287,8 @@ int main(int argc, char* argv[]) {
             std::cerr << "Worker " << id << " exited abnormally\n";
     }
 
-    /* ---- Write result ---- */
-    /* After `rounds` flips, barrier->buf_idx points to the output buffer. */
+    /* ---- write result ---- */
+    /* after `rounds` flips, barrier->buf_idx points to the output buffer. */
     write_output(out_file, bufs[barrier->buf_idx], n);
     out_file.close();
 

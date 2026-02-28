@@ -1,6 +1,3 @@
-//EPV220001 ETHAN VARGHESE
-//AXJ.     AJAY ALLURI
-
 /*
  * my-sum.cpp
  * Implements the Hillis & Steele parallel prefix-sum algorithm using

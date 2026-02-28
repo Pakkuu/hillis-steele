@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <numeric>
 
 bool read_and_validate_input(std::istream& in, int expected_count, std::vector<int>& out) {
     std::string value;
@@ -29,6 +30,18 @@ bool read_and_validate_input(std::istream& in, int expected_count, std::vector<i
     return true;
 }
 
+//calculate prefix_sum
+void prefix_sum(std::vector<int>& nums) {
+    std::vector<int> result(nums.size());
+    std::inclusive_scan(nums.begin(), nums.end(), result.begin());
+    nums = result;
+    return;
+}
+
+void write_to_file(std::vector<int>& nums) {
+
+}
+
 int main(int argc, char* argv[]) {
 
     std::ifstream in(argv[3]);
@@ -41,7 +54,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    for(int x: data) { 
+    prefix_sum(data);
+    write_to_file(data);
+
+    for (int x: data) { 
         std::cout << x << std::endl;
     }
 
